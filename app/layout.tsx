@@ -5,6 +5,10 @@ import { Toaster } from "@/components/ui/toaster";
 import localFont from "next/font/local";
 import { ReactNode } from "react";
 import { SessionProvider } from "next-auth/react";
+import { after } from "next/server";
+import { db } from "@/database/drizzle";
+import { users } from "@/database/schema";
+import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 
 const ibmPlexSans = localFont({
@@ -31,7 +35,22 @@ export const metadata: Metadata = {
 
 const RootLayout = async ({ children }: { children: ReactNode }) => {
   const session = await auth();
-  
+
+  after(async () => {
+    if (!session?.user?.id) return;
+    const user = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, session?.user?.id))
+      .limit(1);
+    if (user[0].lastActivityDate === new Date().toISOString().slice(0, 10))
+      return;
+    await db
+      .update(users)
+      .set({ lastActivityDate: new Date().toISOString().slice(0, 10) })
+      .where(eq(users.id, session?.user?.id));
+  });
+
   return (
     <html lang="en">
       <SessionProvider session={session}>
